@@ -1,0 +1,6 @@
+github.com/m-rap/decimal-go v0.0.1 h1:pZ9ViwaqQVFbAvcF+/Br4YujG2/lXUdjQeMQ4TlX/Go=
+github.com/m-rap/decimal-go v0.0.1/go.mod h1:9iCZW+z9kL0hZJhzuFcQ4zOjpjgl+yojpclrKibIw70=
+github.com/m-rap/itemprice-go v0.0.1 h1:VhY6r1NEpWZvzmSGsagw3UYYVQtPq797/3Vz+d7UYkc=
+github.com/m-rap/itemprice-go v0.0.1/go.mod h1:3c5AbqQWFsAvpE5fjZ/Gmi6cN2DrJs3MWU6y4GDFhCM=
+github.com/mattn/go-sqlite3 v1.14.44 h1:3VSe+xafpbzsLbdr2AWlAZk9yRHiBhTBakioXaCKTF8=
+github.com/mattn/go-sqlite3 v1.14.44/go.mod h1:pjEuOr8IwzLJP2MfGeTb0A35jauH+C2kbHKBr7yXKVQ=

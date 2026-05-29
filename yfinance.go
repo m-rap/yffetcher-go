@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -172,15 +173,43 @@ func FetchStocksData(items []*itp.Item, start time.Time, end time.Time) map[stri
 	return stockRes
 }
 
-func Fetch(itemPriceDbFileName, itemFilterJson string) error {
-	var itemFilter []itemprice.Item
+func Fetch(itemPriceDbFileName string, itemFilterJson []byte) error {
+	itemFilter, err := itemprice.ItemJsonToArr(itemFilterJson)
+	if err != nil {
+		return fmt.Errorf("error parsing item json: %v", err)
+	}
 
-	itemFilterJsonStd, err := standardizeJson([]byte(itemFilterJson))
+	db, err := itemprice.OpenOrCreateDB(itemPriceDbFileName)
 	if err != nil {
-		return fmt.Errorf("json standardizing error: %v", err)
+		return fmt.Errorf("open or create db error: %v", err)
 	}
-	err = json.Unmarshal(itemFilterJsonStd, &itemFilter)
-	if err != nil {
-		return fmt.Errorf("filter unmarshall error: %v", err)
+	defer db.Close()
+
+	var tStart Time
+	tStartMsMax := math.MaxInt64
+	for i := range itemFilter {
+		period, err := itemprice.ChooseFetchPeriod(db, itemFilter[i])
+		if err != nil {
+			return fmt.Errorf("choose fetch period error: %v", err)
+		}
+
+		nowUtc := time.Now().UTC()
+		nowUtcMs := now.UnixMilli()
+		var tmpStart Time
+		switch period {
+		case "1y":
+			tmpStart = time.AddDate(-1, 0, 0)
+		case "6m":
+			tmpStart = time.AddDate(0, -6, 0)
+		case "3m":
+			tmpStart = time.AddDate(0, -3, 0)
+		case "1m":
+			tmpStart = time.AddDate(0, -1, 0)
+		}
+		if tmpStart.UnixMilli() < tStartMsMax {
+			tStart = tmpStart
+			tStartMsMax = tmpStart.UnixMilli()
+		}
 	}
+	itpRes := FetchStocksData(itemFilter, tStart, now)
 }
