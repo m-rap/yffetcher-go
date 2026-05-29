@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-rap/itemprice-go"
 	itp "github.com/m-rap/itemprice-go"
 )
 
@@ -169,4 +170,17 @@ func FetchStocksData(items []*itp.Item, start time.Time, end time.Time) map[stri
 	}
 	fmt.Println("end of fetch data.")
 	return stockRes
+}
+
+func Fetch(itemPriceDbFileName, itemFilterJson string) error {
+	var itemFilter []itemprice.Item
+
+	itemFilterJsonStd, err := standardizeJson([]byte(itemFilterJson))
+	if err != nil {
+		return fmt.Errorf("json standardizing error: %v", err)
+	}
+	err = json.Unmarshal(itemFilterJsonStd, &itemFilter)
+	if err != nil {
+		return fmt.Errorf("filter unmarshall error: %v", err)
+	}
 }
