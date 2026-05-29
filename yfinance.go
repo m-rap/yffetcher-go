@@ -1,6 +1,7 @@
 package yffetcher
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-rap/decimal-go"
 	"github.com/m-rap/itemprice-go"
 	itp "github.com/m-rap/itemprice-go"
 )
@@ -87,14 +89,14 @@ func FetchStockDailyAsync(wg *sync.WaitGroup, item *itp.Item, date time.Time, re
 		q := data.Chart.Result[0].Indicators.Quote[0]
 		// Yahoo sometimes returns empty slices for weekends/holidays
 		if len(q.Close) > 0 && q.Close[0] != 0 {
-			results <- ItemPriceResult{
-				ItemPrice: &itm.ItemPrice{
-					Ticker:     ticker,
-					Date:       date,
-					HighPrice:  q.High[0],
-					LowPrice:   q.Low[0],
-					OpenPrice:  q.Open[0],
-					ClosePrice: q.Close[0],
+			results <- &ItemPriceResult{
+				ItemPrice: &itp.ItemPrice{
+					Item:       item,
+					DatetimeMs: date.UnixMilli(),
+					HighPrice:  decimal.NewDecimalFromFloat(q.High[0]),
+					LowPrice:   decimal.NewDecimalFromFloat(q.Low[0]),
+					OpenPrice:  decimal.NewDecimalFromFloat(q.Open[0]),
+					ClosePrice: decimal.NewDecimalFromFloat(q.Close[0]),
 				},
 			}
 			return
@@ -122,11 +124,11 @@ func FetchStocksData(items []*itp.Item, start time.Time, end time.Time) map[stri
 			if !ok {
 				arr = []*ItemPriceResult{}
 			}
-			arr = append(arr, &res)
+			arr = append(arr, res)
 			if len(arr)%50 == 0 {
-				fmt.Printf("ticker %s collected %d data\n", res.Ticker, len(arr))
+				fmt.Printf("ticker %s collected %d data\n", res.ItemPrice.Item.ID, len(arr))
 			}
-			stockRes[res.Ticker] = arr
+			stockRes[res.ItemPrice.Item.ID] = arr
 		}
 	}()
 
@@ -174,42 +176,87 @@ func FetchStocksData(items []*itp.Item, start time.Time, end time.Time) map[stri
 }
 
 func Fetch(itemPriceDbFileName string, itemFilterJson []byte) error {
-	itemFilter, err := itemprice.ItemJsonToArr(itemFilterJson)
+	itemFilter, err := itp.ItemJsonToArr(itemFilterJson)
 	if err != nil {
 		return fmt.Errorf("error parsing item json: %v", err)
 	}
 
-	db, err := itemprice.OpenOrCreateDB(itemPriceDbFileName)
+	db, err := itp.OpenOrCreateDB(itemPriceDbFileName)
 	if err != nil {
 		return fmt.Errorf("open or create db error: %v", err)
 	}
 	defer db.Close()
 
-	var tStart Time
-	tStartMsMax := math.MaxInt64
+	nowUtc := time.Now().UTC()
+	var tStart time.Time
+	tStartMsMax := int64(math.MaxInt64)
+	itemFilterP := []*itp.Item{}
 	for i := range itemFilter {
-		period, err := itemprice.ChooseFetchPeriod(db, itemFilter[i])
+
+		item, err := itp.GetItemByName(db, itemFilter[i].Name)
+		if err == sql.ErrNoRows {
+			item = itemFilter[i].Copy()
+			item.Unit = "share"
+			insertErr := itp.InsertItem(db, item)
+			if insertErr != nil {
+				return fmt.Errorf("insert item error: %v", insertErr)
+			}
+			fmt.Printf("item inserted to DB\n")
+		} else if err != nil {
+			return fmt.Errorf("get item by name error: %v", err)
+		} else {
+			fmt.Printf("item already exists in DB %v.\n", item.ID)
+
+		}
+		itemFilterP = append(itemFilterP, item)
+
+		period, err := itp.ChooseFetchPeriod(db, item)
 		if err != nil {
 			return fmt.Errorf("choose fetch period error: %v", err)
 		}
 
-		nowUtc := time.Now().UTC()
-		nowUtcMs := now.UnixMilli()
-		var tmpStart Time
+		//nowUtcMs := nowUtc.UnixMilli()
+		var tmpStart time.Time
 		switch period {
 		case "1y":
-			tmpStart = time.AddDate(-1, 0, 0)
+			tmpStart = nowUtc.AddDate(-1, 0, 0)
 		case "6m":
-			tmpStart = time.AddDate(0, -6, 0)
+			tmpStart = nowUtc.AddDate(0, -6, 0)
 		case "3m":
-			tmpStart = time.AddDate(0, -3, 0)
+			tmpStart = nowUtc.AddDate(0, -3, 0)
 		case "1m":
-			tmpStart = time.AddDate(0, -1, 0)
+			tmpStart = nowUtc.AddDate(0, -1, 0)
 		}
 		if tmpStart.UnixMilli() < tStartMsMax {
 			tStart = tmpStart
 			tStartMsMax = tmpStart.UnixMilli()
 		}
 	}
-	itpRes := FetchStocksData(itemFilter, tStart, now)
+
+	itpResultMap := FetchStocksData(itemFilterP, tStart, nowUtc)
+
+	itemPrices := []*itp.ItemPrice{}
+	for _, itpResults := range itpResultMap {
+		for _, itpRes := range itpResults {
+			if itpRes.Err != nil {
+				if itpRes.Err != ErrMarketClosed {
+					d := time.UnixMilli(itpRes.ItemPrice.DatetimeMs)
+					fmt.Printf("err fetching %s %s: %v\n", itpRes.ItemPrice.Item.ID, d.Format("06-0102"), itpRes.Err)
+				}
+				continue
+			}
+			itemPrices = append(itemPrices, itpRes.ItemPrice)
+		}
+	}
+
+	if len(itemPrices) == 0 {
+		return fmt.Errorf("empty result.")
+	}
+	err = itemprice.InsertItemPrices(db, itemPrices)
+	if err != nil {
+		return fmt.Errorf("insert item prices error: %v", err)
+	}
+	fmt.Printf("insert %d item prices successfull.\n", len(itemPrices))
+
+	return nil
 }
