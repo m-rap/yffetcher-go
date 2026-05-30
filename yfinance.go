@@ -182,11 +182,15 @@ func FetchFromJson(itemPriceDbFileName string, itemFilterJson []byte) error {
 	if err != nil {
 		return fmt.Errorf("error parsing item json: %v", err)
 	}
+	itemFilterP := []*itp.Item{}
+	for i := range itemFilter {
+		itemFilterP = append(itemFilterP, &itemFilter[i])
+	}
 
-	return Fetch(itemPriceDbFileName, itemFilter)
+	return Fetch(itemPriceDbFileName, itemFilterP)
 }
 
-func Fetch(itemPriceDbFileName string, itemFilter []itp.Item) error {
+func Fetch(itemPriceDbFileName string, itemFilter []*itp.Item) error {
 	db, err := itp.OpenOrCreateDB(itemPriceDbFileName)
 	if err != nil {
 		return fmt.Errorf("open or create db error: %v", err)
