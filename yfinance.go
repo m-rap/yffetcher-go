@@ -250,12 +250,15 @@ func Fetch(itemPriceDbFileName string, itemFilter []*itp.Item) error {
 	itemPrices := []*itp.ItemPrice{}
 	for _, itpResults := range itpResultMap {
 		for _, itpRes := range itpResults {
+			d := time.UnixMilli(itpRes.datetimeMs)
 			if itpRes.err != nil {
 				if itpRes.err != ErrMarketClosed {
-					d := time.UnixMilli(itpRes.datetimeMs)
 					fmt.Printf("err fetching %s %s: %v\n", itpRes.itemID, d.Format("06-0102"), itpRes.err)
 				}
 				continue
+			}
+			if math.Abs(itpRes.close-0) < 0.0001 {
+				fmt.Printf("warning! price is zero. %s %s: %v. %f %f %f %f\n", itpRes.itemID, d.Format("06-0102"), itpRes.err, itpRes.open, itpRes.close, itpRes.high, itpRes.low)
 			}
 			itemPrices = append(itemPrices, &itp.ItemPrice{
 				Item:       itemMap[itpRes.itemID],
