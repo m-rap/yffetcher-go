@@ -104,7 +104,8 @@ func fetchStockDailyAsync(wg *sync.WaitGroup, itemID string, date time.Time, res
 			return
 		}
 	}
-	results <- priceResult{itemID: itemID, datetimeMs: date.UnixMilli(), err: err}
+	results <- priceResult{itemID: itemID, datetimeMs: date.UnixMilli(), err: ErrMarketClosed}
+	//results <- priceResult{itemID: itemID, datetimeMs: date.UnixMilli(), err: err}
 }
 
 // add .JK suffix for idx stock
