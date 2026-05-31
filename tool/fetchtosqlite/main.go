@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/m-rap/itemprice-go"
 	yffetcher "github.com/m-rap/yffetch-go"
 )
 
@@ -25,7 +26,9 @@ func main() {
 	{"id":"WSKT","name":"WSKT",},
 	{"id":"MBMA","name":"MBMA",},
 ]`
-	err := yffetcher.FetchFromJson("itemprice.db", []byte(searchItems))
+	err := yffetcher.FetchFromJson("itemprice.db", []byte(searchItems), yffetcher.Options{
+		ForcePeriod: itemprice.Period1y,
+	})
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 	}

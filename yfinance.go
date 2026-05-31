@@ -178,7 +178,11 @@ func fetchStocksData(items []*itp.Item, start time.Time, end time.Time) map[stri
 	return stockRes
 }
 
-func FetchFromJson(itemPriceDbFileName string, itemFilterJson []byte) error {
+type Options struct {
+	ForcePeriod itp.Period
+}
+
+func FetchFromJson(itemPriceDbFileName string, itemFilterJson []byte, opts Options) error {
 	itemFilter, err := itp.ItemJsonToArr(itemFilterJson)
 	if err != nil {
 		return fmt.Errorf("error parsing item json: %v", err)
@@ -188,10 +192,10 @@ func FetchFromJson(itemPriceDbFileName string, itemFilterJson []byte) error {
 		itemFilterP = append(itemFilterP, &itemFilter[i])
 	}
 
-	return Fetch(itemPriceDbFileName, itemFilterP)
+	return Fetch(itemPriceDbFileName, itemFilterP, opts)
 }
 
-func Fetch(itemPriceDbFileName string, itemFilter []*itp.Item) error {
+func Fetch(itemPriceDbFileName string, itemFilter []*itp.Item, opts Options) error {
 	db, err := itp.OpenOrCreateDB(itemPriceDbFileName)
 	if err != nil {
 		return fmt.Errorf("open or create db error: %v", err)
@@ -203,6 +207,15 @@ func Fetch(itemPriceDbFileName string, itemFilter []*itp.Item) error {
 	tStartMsMin := int64(math.MaxInt64)
 	items := []*itp.Item{}
 	itemMap := make(map[string]*itp.Item)
+	periodMin := itp.Period1m
+
+	if opts.ForcePeriod != itp.PeriodUnknown {
+		tmpStart := nowUtc.AddDate(-1, 0, 0)
+		tStart = tmpStart
+		tStartMsMin = tmpStart.UnixMilli()
+		periodMin = opts.ForcePeriod
+	}
+
 	for i := range itemFilter {
 
 		item, err := itp.GetItemByName(db, itemFilter[i].Name)
@@ -223,29 +236,35 @@ func Fetch(itemPriceDbFileName string, itemFilter []*itp.Item) error {
 		items = append(items, item)
 		itemMap[item.ID] = item
 
-		period, err := itp.ChooseFetchPeriod(db, item)
-		if err != nil {
-			return fmt.Errorf("choose fetch period error: %v", err)
-		}
+		if opts.ForcePeriod == itp.PeriodUnknown {
+			period, err := itp.ChooseFetchPeriod(db, item)
+			if err != nil {
+				return fmt.Errorf("choose fetch period error: %v", err)
+			}
 
-		//nowUtcMs := nowUtc.UnixMilli()
-		var tmpStart time.Time
-		switch period {
-		case itp.Period1y:
-			tmpStart = nowUtc.AddDate(-1, 0, 0)
-		case itp.Period6m:
-			tmpStart = nowUtc.AddDate(0, -6, 0)
-		case itp.Period3m:
-			tmpStart = nowUtc.AddDate(0, -3, 0)
-		case itp.Period1m:
-			tmpStart = nowUtc.AddDate(0, -1, 0)
-		}
-		if tmpStart.UnixMilli() < tStartMsMin {
-			tStart = tmpStart
-			tStartMsMin = tmpStart.UnixMilli()
+			//nowUtcMs := nowUtc.UnixMilli()
+			var tmpStart time.Time
+			switch period {
+			case itp.Period1y:
+				tmpStart = nowUtc.AddDate(-1, 0, 0)
+			case itp.Period6m:
+				tmpStart = nowUtc.AddDate(0, -6, 0)
+			case itp.Period3m:
+				tmpStart = nowUtc.AddDate(0, -3, 0)
+			case itp.Period1m:
+				tmpStart = nowUtc.AddDate(0, -1, 0)
+			}
+			if tmpStart.UnixMilli() < tStartMsMin {
+				tStart = tmpStart
+				tStartMsMin = tmpStart.UnixMilli()
+			}
+			if period < periodMin {
+				periodMin = period
+			}
 		}
 	}
 
+	fmt.Printf("fetching data using period %s\n", periodMin.String())
 	itpResultMap := fetchStocksData(items, tStart, nowUtc)
 
 	itemPrices := []*itp.ItemPrice{}
