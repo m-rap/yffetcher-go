@@ -28,6 +28,7 @@ func main() {
 ]`
 	err := yffetcher.FetchFromJson("itemprice.db", []byte(searchItems), yffetcher.Options{
 		ForcePeriod: itemprice.Period1y,
+		DelSameDate: true,
 	})
 	if err != nil {
 		fmt.Printf("error: %v\n", err)

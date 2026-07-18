@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/m-rap/decimal-go v0.0.1
-	github.com/m-rap/itemprice-go v0.0.5
+	github.com/m-rap/itemprice-go v0.0.6
 )
 
 require (

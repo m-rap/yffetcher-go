@@ -43,15 +43,18 @@ type YahooResponse struct {
 
 var ErrMarketClosed = errors.New("market closed")
 
-func fetchStockDailyAsync(wg *sync.WaitGroup, itemID string, date time.Time, results chan<- priceResult) {
+func fetchStockDailyAsync(wg *sync.WaitGroup, itemID string, dateUtc time.Time, results chan<- priceResult) {
 	defer wg.Done()
 
 	ticker := itemID + ".jk"
 
 	// Use interval=1d to get daily OHLC for the range
 
+	// dateIdxSec := dateUtc.Unix() + 7*60*60
+
 	// dateStr := date.Format("2006-01-02")
-	p1 := date.Unix()
+	// p1 := dateIdxSec
+	p1 := dateUtc.Unix()
 	// p2 := p1 + 86400 // 24 hours later
 	p2 := p1 + 12*60*60 // 12 hour later
 
@@ -71,7 +74,7 @@ func fetchStockDailyAsync(wg *sync.WaitGroup, itemID string, date time.Time, res
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		results <- priceResult{itemID: itemID, datetimeMs: date.UnixMilli(), err: err}
+		results <- priceResult{itemID: itemID, datetimeMs: dateUtc.UnixMilli(), err: err}
 		return
 	}
 	defer resp.Body.Close()
@@ -85,7 +88,7 @@ func fetchStockDailyAsync(wg *sync.WaitGroup, itemID string, date time.Time, res
 	var data YahooResponse
 	// if err := json.NewDecoder(bytes.NewReader(buff)).Decode(&data); err != nil {
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		results <- priceResult{itemID: itemID, datetimeMs: date.UnixMilli(), err: err}
+		results <- priceResult{itemID: itemID, datetimeMs: dateUtc.UnixMilli(), err: err}
 		return
 	}
 
@@ -95,7 +98,7 @@ func fetchStockDailyAsync(wg *sync.WaitGroup, itemID string, date time.Time, res
 		if len(q.Close) > 0 && q.Close[0] != 0 {
 			results <- priceResult{
 				itemID:     itemID,
-				datetimeMs: date.UnixMilli(),
+				datetimeMs: dateUtc.UnixMilli(),
 				high:       q.High[0],
 				low:        q.Low[0],
 				open:       q.Open[0],
@@ -104,7 +107,7 @@ func fetchStockDailyAsync(wg *sync.WaitGroup, itemID string, date time.Time, res
 			return
 		}
 	}
-	results <- priceResult{itemID: itemID, datetimeMs: date.UnixMilli(), err: ErrMarketClosed}
+	results <- priceResult{itemID: itemID, datetimeMs: dateUtc.UnixMilli(), err: ErrMarketClosed}
 	//results <- priceResult{itemID: itemID, datetimeMs: date.UnixMilli(), err: err}
 }
 
@@ -180,6 +183,7 @@ func fetchStocksData(items []*itp.Item, start time.Time, end time.Time) map[stri
 
 type Options struct {
 	ForcePeriod itp.Period
+	DelSameDate bool
 }
 
 func FetchFromJson(itemPriceDbFileName string, itemFilterJson []byte, opts Options) error {
@@ -294,7 +298,7 @@ func Fetch(itemPriceDbFileName string, itemFilter []*itp.Item, opts Options) err
 	if len(itemPrices) == 0 {
 		return fmt.Errorf("empty result")
 	}
-	err = itp.InsertItemPrices(db, itemPrices)
+	err = itp.InsertItemPrices(db, itemPrices, opts.DelSameDate)
 	if err != nil {
 		return fmt.Errorf("insert item prices error: %v", err)
 	}
