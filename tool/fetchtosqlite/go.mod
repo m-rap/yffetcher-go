@@ -5,7 +5,7 @@ replace github.com/m-rap/yffetch-go => ../..
 go 1.26.2
 
 require (
-	github.com/m-rap/itemprice-go v0.0.6
+	github.com/m-rap/itemprice-go v0.0.7
 	github.com/m-rap/yffetch-go v0.0.0-00010101000000-000000000000
 )
 
